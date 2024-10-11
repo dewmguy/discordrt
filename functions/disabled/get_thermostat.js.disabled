@@ -1,0 +1,48 @@
+// get_thermostat.js
+
+const fetch = require('node-fetch');
+const ECOBEE_APIKEY = process.env.ECOBEE_APIKEY
+
+const get_thermostat = async ({ args_here }) => {
+    console.log("get_thermostat function was called");
+    try {
+        const url = `http://api.address.net/apikey=${ECOBEE_APIKEY}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const result = data.targeting.the.json.stuff;
+        if (!result) throw new Error('error: ${error}');
+        const output = `stuff happened`;
+        return output;
+    }
+    catch (error) { return { error: error.message }; }
+}
+
+module.exports = { get_thermostat };
+
+/*
+{
+  "name": "get_thermostat",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "queryType": {
+        "type": "string",
+        "description": "The queryType parameter is restricted to: 'getTemp', 'getMode', 'getStatus', 'setHold', 'dropHold', 'setFan', 'setMode', 'setVacation', 'deleteVacation', 'setProgram', 'setAway', 'getReport'."
+      },
+      "user": {
+        "type": "string",
+        "description": "the user tag belonging to the user who generated the query. This will be used to authenticate the request."
+      },
+      "parameter": {
+        "type": "string",
+        "description": "The optional data to accompany certain queryTypes that will be sending data to the function (e.g. the numerical temperature in Fahrenheit."
+      }
+    },
+    "required": [
+      "queryType",
+      "user"
+    ]
+  },
+  "description": "Determine the temperature in my house as indicated by the ecobee thermostat."
+}
+*/

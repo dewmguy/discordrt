@@ -1,0 +1,64 @@
+// get_espn.js
+
+const fetch = require('node-fetch');
+
+const get_espn = async ({ sport, league, infoType, team, location }) => {
+  console.log(`get_espn function was called`);
+  try {
+    let url = `http://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/${infoType}`;
+    url += infoType === 'teams' ? `/${location}` : '';
+
+    const response = await fetch(url);
+    const result = await response.json();
+    if(!result) { throw new Error(`${infoType} data was not recoverable, API failure.`); }
+    const data = infoType === 'scores' ? result.events : infoType === 'teams' ? result.team : null;
+    return data;
+  }
+  catch (error) {
+    console.error("Error in get_espn:", error);
+    return { error: error.message };
+  }
+}
+
+module.exports = { get_espn };
+
+/*
+{
+  "name": "get_espn",
+  "description": "Retrieves data from the ESPN API. Useful when asked about scores from games or information about teams.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "sport": {
+        "type": "string",
+        "description": "The sport.",
+        "enum": ["football", "baseball", "hockey", "basketball"]
+      },
+      "league": {
+        "type": "string",
+        "description": "The league of the sport.",
+        "enum": ["nfl", "mlb", "nhl", "nba", "wnba", "college-football", "college-basketball", "womens-college-basketball", "mens-college-basketball"]
+      },
+      "infoType": {
+        "type": "string",
+        "description": "The information category: 'scores' retrieves scoreboards for all games played in the last 7 days; 'team' retrieves a team's complete profile, including the most recent game data.",
+        "enum": ["scoreboard", "teams"]
+      },
+      "location": {
+        "type": "string",
+        "description": "The location of the team. Pro sports requires the city name (e.g. Denver). College sports requires the state name (e.g. Colorado)."
+      },
+      "team": {
+        "type": "string",
+        "description": "The name of the team, when applicable."
+      }
+    },
+    "required": [
+      "sport",
+      "league",
+      "infoType",
+      "location"
+    ]
+  }
+}
+*/

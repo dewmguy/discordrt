@@ -1,0 +1,105 @@
+// get_espn_player.js
+
+const fetch = require('node-fetch');
+
+const get_espn_player = async ({ sport, league, infoType, location, playerName, season }) => {
+  console.log(`get_espn_player function was called`);
+  try {
+    let urlBase = `http://site.api.espn.com/apis/site/v2/sports/${sport}`;
+
+    const teamURL = `${league}/teams/${location}`;
+    const teamResponse = await fetch(`${urlBase}/${teamURL}`);
+    console.log(`${urlBase}/${teamURL}`);
+    if(!teamResponse) { throw new Error('API Failure with Teams enpoint.'); }
+    const teamData = await teamResponse.json();
+    const teamID = teamData.team.id;
+    if(!teamData) { throw new Error('Team ID was not recoverable, API failure.'); }
+
+    urlBase += `/leagues/${league}/seasons/${season}`;
+    
+    const rosterURL = `/leagues/${league}/seasons/${season}/teams/${teamID}/athletes`;
+    const rosterResponse = await fetch(`${urlBase}/${rosterURL}`);
+    console.log(`${urlBase}/${rosterURL}`);
+    if(!rosterResponse) { throw new Error('API Failure with Roster enpoint.'); }
+    const rosterData = await rosterResponse.json();
+    if(!rosterData) { throw new Error('Roster data was not recoverable, API failure.'); }
+    if(infoType === 'roster') {
+      console.log(rosterData);
+      return "Roster data was not recoverable, API failure.";
+      //return rosterData;
+    }
+
+    for (let items of rosterData.items) {
+      const playerResponse = await fetch(items.$ref);
+      console.log(`${items.$ref}`);
+      if(!playerResponse) { throw new Error('API Failure with Player enpoint.'); }
+      const playerData = await playerResponse.json();
+      if(!playerData) { throw new Error('Player data was not recoverable, API failure.'); }
+      if (playerName && (playerData.fullName === playerName)) {
+        if (infoType === 'bio') { return playerData; }
+      }
+    }
+
+    if (infoType === 'stats') {
+      const statsURL = `types/2/athletes/${playerData.id}/statistics?lang=en&region=us`;
+      const statsResponse = await fetch(`${urlBase}/${statsURL}`);
+      console.log(`${urlBase}/${statsURL}`);
+      if(!playerResponse) { throw new Error('API Failure with Stats enpoint.'); }
+      const statsData = await statsResponse.json();
+      console.log(`${urlBase}/${statsURL}`);
+      return statsData;
+    }
+  }
+  catch (error) {
+    console.error("Error in get_espn_player:", error);
+    return { error: error.message };
+  }
+}
+
+module.exports = { get_espn_player };
+
+/*
+{
+  "name": "get_espn_player",
+  "description": "Retrieves data from the ESPN API. Useful when asked about player bios and statistics.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "sport": {
+        "type": "string",
+        "description": "The sport. Required.",
+        "enum": ["football", "baseball", "hockey", "basketball"]
+      },
+      "league": {
+        "type": "string",
+        "description": "The league of the sport. Required.",
+        "enum": ["nfl", "mlb", "nhl", "nba", "wnba", "college-football", "college-basketball", "womens-college-basketball", "mens-college-basketball"]
+      },
+      "infoType": {
+        "type": "string",
+        "description": "The category of information. Required. 'bio' retrieves a player's profile. 'stats' retrieves a player's stats. 'roster' will provide a complete list of players for the team.",
+        "enum": ["bio", "stats", "roster"]
+      },
+      "location": {
+        "type": "string",
+        "description": "The location of the team. Required. Pro sports requires the city name (e.g. Denver). College sports requires the state name (e.g. Colorado)."
+      },
+      "playerName": {
+        "type": "string",
+        "description": "The full name of the player. Optional."
+      },
+      "season": {
+        "type": "number",
+        "description": "The year of the league season. Required. Default: current year."
+      }
+    },
+    "required": [
+      "sport",
+      "league",
+      "infoType",
+      "location",
+      "season"
+    ]
+  }
+}
+*/

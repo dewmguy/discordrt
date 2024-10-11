@@ -1,0 +1,95 @@
+// get_amctheaters.js
+
+const fetch = require('node-fetch');
+//const { get_coordinate } = require('./get_coordinate');
+const AMCTHEATERS_APIKEY = process.env.AMCTHEATERS_APIKEY;
+
+const get_amctheaters = async ({ location, endpoint }) => {
+  console.log("get_amctheaters was called");
+  try {
+    //let coordinates = await get_coordinate({ location });
+    //if (coordinates.error) throw new Error(coordinates.error);
+    //let { latitude, longitude } = coordinates;
+
+    // main logic
+    //const url = `https://api.sandbox.amctheatres.com/v2/`;
+
+    const amcUrl = `${url}/${endpoint}`;
+    const options = {
+      headers: { 'X-AMC-Vendor-Key': AMCTHEATERS_APIKEY }
+    };
+    const response = await fetch(amcUrl, options);
+    const amcData = await response.json();
+    console.log(amcData);
+    return amcData;
+  }
+  catch (error) {
+    console.log(error.message);
+    return { error: error.message };
+  }
+};
+
+module.exports = { get_amctheaters };
+
+/*
+{
+  "name": "get_amctheaters",
+  "description": "This function connects to the AMC Theaters API to retrieve movie showtime information for theaters in a given location.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "location": {
+        "type": "string",
+        "description": "The city and state, zip, or that the user is requesting from."
+      },
+      "movie": {
+        "type": "string",
+        "description": "The movie being requested."
+      }
+    },
+    "required": [
+      "location"
+    ]
+  }
+}
+*/
+
+// https://developers.amctheatres.com/Theatres
+// theaters endpoint can be an advanced filter for locating theaters that contain certain ameneities
+// attributes for theater filtering
+// object number, id number, alphanumeric code, (comment)
+// -------------------------------------------------------------
+// 166, 27, distractionfreeenvironment (no children after 6)
+// 143, no id, amcstubsalist (allows to buy tickets if you're a sub ?)
+// 135, 98, vipseatingselectautitoriums (allows buying vip tickets ?)
+// 131, 87, stadiumseatingselectauditoriums
+// 130, 86, stadiumseating
+// 128, 79, reservedseating
+// 127, 76, reclinerseating
+// 110, 109, premiumzone
+// 109, 70, plushrecliners
+// 105, 187, featurefare (good food available ?)
+// 96, 53, orderhotfoods (hot food available)
+// 90, 191, 70MM
+// 85, 10, amcprime (super fancy theater)
+// 82, 37, imax
+// 78, 29, dolbycinemaatamcprime (even super fancier theater)
+// 75, 169, dineindeliverytoseat
+// 74, 24, dineinseatsideservice (uber food)
+// 13, no id, englishdubbed
+
+// https://developers.amctheatres.com/LocationSuggestions
+// theater search endpoint to find any theater, non filterable
+// search by city, state, zip, airport, or theater name
+
+// https://developers.amctheatres.com/Movies
+// all kinds of endpoints for general movie data like lists
+
+// https://developers.amctheatres.com/Showtimes
+// endpoint for movies showing at a particular theater
+// /v2/showtimes/views/current-location/{date}/{latitude}/{longitude}
+// or 
+// /v2/theatres/{theatre-number}/showtimes/{date} 
+
+// https://developers.amctheatres.com/SeatingLayouts
+// seating layouts endpoint, can use to determine if an acceptable seat is available
