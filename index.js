@@ -64,7 +64,6 @@ async function sendAudioBufferToWebSocket(base64Chunk) {
         type: 'input_audio_buffer.append',
         audio: base64Chunk
       }));
-      //ws.send(JSON.stringify({ type: 'response.create' }));
     }
     catch (error) { console.log('WebSocket Error: Audio Buffer Problem', error); }
   }
@@ -74,6 +73,8 @@ async function sendAudioBufferToWebSocket(base64Chunk) {
 async function startListening() {
   console.log('Listening to voice channel');
   const receiver = connection.receiver;
+  
+  //if(!ws && !)
 
   receiver.speaking.on('start', async (userId) => {
     try {
@@ -100,6 +101,7 @@ async function startListening() {
           console.log('Saving wav file');
           await saveAudioBufferToFile(userPCMBuffer, user.username);
           ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+          ws.send(JSON.stringify({ type: 'response.create' }));
           userPCMBuffer = []; // reset
           console.log(`decoder detects ${user.username} stopped speaking, pushing response request`);
         });
@@ -121,6 +123,11 @@ async function startListening() {
 async function startConversation() {
   console.log('Connecting to websocket');
   let wavBuffer = []; // initialize
+
+  if (!audioPlayer) {
+    console.log('Connected to audio stream');
+    audioPlayer = createAudioPlayer();
+  }
 
   ws = new WebSocket(url, { headers: {
     "Authorization": "Bearer " + process.env.OPENAI_API_KEY,
@@ -193,23 +200,19 @@ async function startConversation() {
 }
 
 async function connectChannel(interaction) {
-  if(interaction) {
-    console.log('Received /connect command');
-  }
-  const channel = interaction.member.voice.channel;
-  if (!channel) {
+  if(interaction) { console.log('Received /connect command'); }
+  const userChannel = interaction.member.voice.channel;
+  console.log(`Connecting to voice channel: ${userChannel.name}`);
+  if (!userChannel) {
     console.log('User is not in a voice channel');
     await interaction.editReply({ content: 'You need to be in a voice channel to use this command!', ephemeral: true });
     return;
   }
-  if (!audioPlayer) {
-    audioPlayer = createAudioPlayer();
-  }
-  console.log(`Connecting to voice channel: ${channel.name}`);
+
   connection = joinVoiceChannel({
-    channelId: channel.id,
-    guildId: channel.guild.id,
-    adapterCreator: channel.guild.voiceAdapterCreator,
+    channelId: userChannel.id,
+    guildId: userChannel.guild.id,
+    adapterCreator: userChannel.guild.voiceAdapterCreator,
     selfDeaf: false,
     selfMute: false
   });
@@ -219,9 +222,9 @@ async function connectChannel(interaction) {
     try { await interaction.editReply({ content: 'Connected to voice channel' }); }
     catch (error) { console.log('Error replying to interaction', error); }
     try { await startConversation(); }
-    catch (error) { console.log('Error starting conversation', error); }
+    catch (error) { console.log('Error starting startConversation()', error); }
     try { await startListening(); }
-    catch (error) { console.log('Error starting to listen', error); }
+    catch (error) { console.log('Error starting startListening()', error); }
   });
 
   connection.on(VoiceConnectionStatus.Disconnected, () => {
@@ -234,9 +237,7 @@ async function connectChannel(interaction) {
 }
 
 async function disconnectChannel(interaction) {
-  if(interaction) {
-    console.log('Received /disconnect command');
-  }
+  if(interaction) { console.log('Received /disconnect command'); }
   if (connection) {
     console.log('Disconnecting from voice channel');
     connection.destroy();
