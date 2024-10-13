@@ -2,12 +2,12 @@
 
 ## Overview
 
-This Node.js application is a Discord bot that integrates voice interaction capabilities with advanced AI. The bot connects to Discord, OpenAI's Realtime API, and manages voice channels, allowing for real-time communication using the latest AI models. It is capable of joining voice channels, processing audio input, and responding with intelligent, context-aware content, providing an immersive and dynamic experience for users.
+This Node.js Discord bot integrates OpenAI's Realtime API allowing for real-time communication using the latest models. It is capable of joining voice channels and responding to voice users, providing an immersive and dynamic experience.
 
 ## Features
 
-- **Discord and OpenAI Realtime Integration**: The bot uses the `discord.js` and `@discordjs/voice` libraries to interact seamlessly with Discord servers, including joining voice channels and handling real-time voice interactions. It connects to OpenAI's Realtime API via WebSocket, leveraging the latest AI models to generate intelligent, context-aware responses. This combination allows the bot to join voice channels, process voice inputs, and generate immediate, intelligent responses, creating a smooth and immersive user experience.
-- **Advanced Audio Handling**: The bot uses `prism-media` for handling and converting audio streams, ensuring that user inputs are effectively processed and responses are seamlessly delivered within the voice channel. This feature supports reading, converting, and playing audio as needed.
+- **Discord and OpenAI Realtime Integration**: The bot uses the `discord.js` and `@discordjs/voice` libraries to interact seamlessly with Discord servers, including joining voice channels and handling real-time voice interactions. It connects to OpenAI's Realtime API via WebSocket, leveraging the latest models to generate intelligent, context-aware responses.
+- **Advanced Audio Handling**: The bot uses `prism-media` for handling and converting audio streams to and from the discord voice channel, ensuring that user inputs are effectively processed and responses are seamlessly delivered within the voice channel.
 
 ## Dependencies
 
