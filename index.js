@@ -4,11 +4,9 @@
 require('dotenv').config();
 const { Client, Events, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, VoiceConnectionStatus, EndBehaviorType } = require('@discordjs/voice');
+const prism = require('prism-media');
 const WebSocket = require('ws');
 const { Readable } = require('stream');
-const fs = require('fs');
-const path = require('path');
-const prism = require('prism-media');
 
 //discord setup
 const client = new Client({
@@ -26,36 +24,6 @@ const url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024
 let ws;
 let connection;
 let audioPlayer;
-
-function createWavHeader(dataSize, numChannels = 1, sampleRate = 24000, bitsPerSample = 16) {
-  const header = Buffer.alloc(44);
-  //RIFF chunk descriptor
-  header.write('RIFF', 0); // ChunkID
-  header.writeUInt32LE(36 + dataSize, 4); // ChunkSize
-  header.write('WAVE', 8); // Format
-  //fmt sub-chunk
-  header.write('fmt ', 12); // Subchunk1ID
-  header.writeUInt32LE(16, 16); // Subchunk1Size
-  header.writeUInt16LE(1, 20); // AudioFormat
-  header.writeUInt16LE(numChannels, 22); // NumChannels
-  header.writeUInt32LE(sampleRate, 24); // SampleRate
-  header.writeUInt32LE(sampleRate * numChannels * (bitsPerSample / 8), 28); // ByteRate
-  header.writeUInt16LE(numChannels * (bitsPerSample / 8), 32); // BlockAlign
-  header.writeUInt16LE(bitsPerSample, 34); // BitsPerSample
-  //data sub-chunk
-  header.write('data', 36); // Subchunk2ID
-  header.writeUInt32LE(dataSize, 40); // Subchunk2Size
-  return header;
-}
-
-async function saveAudioBufferToFile(pcmBuffer, username) {
-  const audioBuffer = Buffer.concat(pcmBuffer);
-  const filePath = path.join(__dirname, 'debug', `${username}-${Date.now()}.wav`);
-  const header = createWavHeader(audioBuffer.length);
-  const combinedBuffer = Buffer.concat([header, audioBuffer]);
-  await fs.promises.writeFile(filePath, combinedBuffer);
-  console.log(`wav file saved to ${filePath}`);
-}
 
 async function sendAudioBufferToWebSocket(base64Chunk) {
   if (base64Chunk.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
@@ -90,25 +58,20 @@ async function startListening() {
         const userRawStream = receiver.subscribe(userId, {
           end: {
             behavior: EndBehaviorType.AfterSilence,
-            duration: 100 // ms
+            duration: 300 // ms
           }
         });
 
-        //let userPCMBuffer = []; // initialize
         const userPCMStream = userRawStream.pipe(new prism.opus.Decoder({ rate: 24000, channels: 1, frameSize: 960 }));
 
         userPCMStream.on('data', async (chunk) => {
-          //console.log(`${user.username} voice processing`);
           await sendAudioBufferToWebSocket(chunk.toString('base64'));
-          //userPCMBuffer.push(chunk);
         });
 
         userPCMStream.on('end', async () => {
           console.log(`${user.username} stopped speaking`);
           ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
           ws.send(JSON.stringify({ type: 'response.create' }));
-          //await saveAudioBufferToFile(userPCMBuffer, user.username);
-          //userPCMBuffer = []; // reset
         });
       }
       else { console.log('error: discord api issue'); }
@@ -137,17 +100,17 @@ async function startConversation() {
       type: 'session.update',
       session: {
         instructions: "You don't know anything after October 2023. You are helpful and nice, but you don't like the sound of your own voice. Be charming, funny, and sarcastic, but be terse.",
-        voice: 'nova' // alloy, echo, fable, onyx, nova, shimmer 
+        voice: 'shimmer' // alloy, echo, shimmer (soon: fable, onyx, nova)
       }
     }));
   });
 
   const errorHandler = (error) => {
-    console.log('openai: [type error]', error.type);
-    console.log('openai: [code error]', error.code);
-    console.log('openai: [message error]', error.message);
-    console.log('openai: [param error]', error.param);
-    console.log('openai: [event_id error]', error.event_id);
+    console.log('openai error: [type]', error.type);
+    console.log('openai error: [code]', error.code);
+    console.log('openai error: [message]', error.message);
+    console.log('openai error: [param]', error.param);
+    console.log('openai error: [event_id]', error.event_id);
   };
 
   ws.on('message', async (message) => {
@@ -157,9 +120,6 @@ async function startConversation() {
       errorHandler(error);
     }
     else if (response.type === "response.audio_transcript.done") { console.log('openai:', response.transcript); }
-    else if (response.type === "response.input_audio_buffer.speech_started") {
-      // send something important to the api?
-    }
     else if (response.type === "response.audio.delta") {
       try {
         console.log('openai: response.audio.delta');
@@ -172,7 +132,6 @@ async function startConversation() {
       try {
         const combinedBuffer = Buffer.concat(wavBuffer);
         wavBuffer = []; // reset
-        //await saveAudioBufferToFile([combinedBuffer], 'openai-response');
 
         const apiPCMStream = new Readable();
         apiPCMStream.push(combinedBuffer);
@@ -193,7 +152,6 @@ async function startConversation() {
       }
       catch (error) { console.log('error: failure to process audio done response', error); }
     }
-    //else { console.log('openai:', response.type); }
   });
 
   ws.on('error', (error) => {
@@ -284,7 +242,7 @@ client.on(Events.InteractionCreate, async interaction => {
 // Shutdown
 const shutdown = async () => {
   console.log('');
-  console.log('bot shutting down');
+  console.log('shutting down');
   await disconnectChannel();
   await client.destroy();
   process.exit(0);
@@ -295,7 +253,7 @@ process.on('SIGTERM', () => shutdown());
 
 // Startup
 client.on(Events.ClientReady, async () => {
-  console.log('bot starting up');
+  console.log('starting up');
   const commands = [
     new SlashCommandBuilder().setName('connect').setDescription('Connect to the voice channel'),
     new SlashCommandBuilder().setName('disconnect').setDescription('Disconnect from the voice channel'),
@@ -307,7 +265,7 @@ client.on(Events.ClientReady, async () => {
       Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-    console.log('bot is ready');
+    console.log('ready');
   }
   catch (error) { console.log('Error registering slash commands', error); }
 });

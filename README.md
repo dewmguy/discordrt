@@ -8,7 +8,6 @@ This Node.js application is a Discord bot that integrates voice interaction capa
 
 - **Discord and OpenAI Realtime Integration**: The bot uses the `discord.js` and `@discordjs/voice` libraries to interact seamlessly with Discord servers, including joining voice channels and handling real-time voice interactions. It connects to OpenAI's Realtime API via WebSocket, leveraging the latest AI models to generate intelligent, context-aware responses. This combination allows the bot to join voice channels, process voice inputs, and generate immediate, intelligent responses, creating a smooth and immersive user experience.
 - **Advanced Audio Handling**: The bot uses `prism-media` for handling and converting audio streams, ensuring that user inputs are effectively processed and responses are seamlessly delivered within the voice channel. This feature supports reading, converting, and playing audio as needed.
-- **Function Calling**: The bot includes function calling capabilities to enhance user interactions. It can perform specific actions, such as retrieving data or interacting with third-party services, in response to voice commands, making it highly adaptable to various needs.
 
 ## Dependencies
 
