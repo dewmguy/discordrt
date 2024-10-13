@@ -111,13 +111,9 @@ async function startListening() {
           //userPCMBuffer = []; // reset
         });
       }
-      else {
-        console.log('error: discord api issue');
-      }
+      else { console.log('error: discord api issue'); }
     }
-    catch (error) {
-      console.log('error: mishandling speaking event', error);
-    }
+    catch (error) { console.log('error: mishandling speaking event', error); }
   });
 }
 
