@@ -65,13 +65,13 @@ async function sendAudioBufferToWebSocket(base64Chunk) {
         audio: base64Chunk
       }));
     }
-    catch (error) { console.log('WebSocket Error: Audio Buffer Problem', error); }
+    catch (error) { console.log('error: websocket audio buffer problem', error); }
   }
-  else { console.log('WebSocket is not open or audio buffer is empty.'); }
+  else { console.log('error: websocket is not open or audio buffer is empty'); }
 }
 
 async function startListening() {
-  console.log('Listening to voice channel');
+  console.log('listening to voice channel');
   const receiver = connection.receiver;
   
   //if(!ws && !)
@@ -80,7 +80,7 @@ async function startListening() {
     try {
       const user = client.users.cache.get(userId);
       if (user) {
-        console.log(`Discord detects ${user.username} started speaking`);
+        console.log(`${user.username} started speaking`);
         const userRawStream = receiver.subscribe(userId, {
           end: {
             behavior: EndBehaviorType.AfterSilence,
@@ -92,40 +92,35 @@ async function startListening() {
         const userPCMStream = userRawStream.pipe(new prism.opus.Decoder({ rate: 24000, channels: 1, frameSize: 960 }));
 
         userPCMStream.on('data', async (chunk) => {
-          userPCMBuffer.push(chunk);
+          //console.log(`${user.username} voice processing`);
           await sendAudioBufferToWebSocket(chunk.toString('base64'));
-          console.log(`${user.username} voice is being processed`);
+          userPCMBuffer.push(chunk);
         });
 
         userPCMStream.on('end', async () => {
-          console.log('Saving wav file');
-          await saveAudioBufferToFile(userPCMBuffer, user.username);
+          console.log(`${user.username} stopped speaking`);
           ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
           ws.send(JSON.stringify({ type: 'response.create' }));
+          await saveAudioBufferToFile(userPCMBuffer, user.username);
           userPCMBuffer = []; // reset
-          console.log(`decoder detects ${user.username} stopped speaking, pushing response request`);
         });
       }
       else {
-        console.log('Discord Error: Discord API issue.');
+        console.log('error: discord api issue');
       }
     }
     catch (error) {
-      console.log('Error handling speaking start event', error);
+      console.log('error: mishandling speaking event', error);
     }
-  });
-
-  receiver.speaking.on('stop', async (userId) => {
-    console.log(`Discord detects ${user.username} stopped speaking`);
   });
 }
 
 async function startConversation() {
-  console.log('Connecting to websocket');
+  console.log('connecting to websocket');
   let wavBuffer = []; // initialize
 
   if (!audioPlayer) {
-    console.log('Connected to audio stream');
+    console.log('connected to audio stream');
     audioPlayer = createAudioPlayer();
   }
 
@@ -135,15 +130,15 @@ async function startConversation() {
   }});
 
   ws.on('open', () => {
-    console.log('Websocket connected');
+    console.log('websocket connected');
   });
 
   const errorHandler = (error) => {
-    console.log(`API 'type' error:`, error.type);
-    console.log(`API 'code' error:`, error.code);
-    console.log(`API 'message' error:`, error.message);
-    console.log(`API 'param' error:`, error.param);
-    console.log(`API 'event_id' error:`, error.event_id);
+    console.log('openai: [type error]', error.type);
+    console.log('openai: [code error]', error.code);
+    console.log('openai: [message error]', error.message);
+    console.log('openai: [param error]', error.param);
+    console.log('openai: [event_id error]', error.event_id);
   };
 
   ws.on('message', async (message) => {
@@ -152,10 +147,11 @@ async function startConversation() {
       const { error } = response;
       errorHandler(error);
     }
+    else if (response.type === "response.audio_transcript.done") { console.log('openai:', response.transcript); }
     else if (response.type === "response.audio.delta") {
       try {
         connection.subscribe(audioPlayer);
-        console.log('Received audio package from API');
+        console.log('openai: response.audio.delta');
         const audioChunk = Buffer.from(response.delta, 'base64');
         wavBuffer.push(audioChunk);
 
@@ -175,36 +171,35 @@ async function startConversation() {
 
         audioPlayer.play(resource);
       }
-      catch (error) { console.log('Error processing audio delta response', error); }
+      catch (error) { console.log('error: failure to process audio delta response', error); }
     } 
     else if (response.type === "response.audio.done") {
       try {
-        console.log('creating wav file');
         const combinedBuffer = Buffer.concat(wavBuffer);
         await saveAudioBufferToFile([combinedBuffer], 'openai-response');
         wavBuffer = []; // reset
       }
-      catch (error) { console.log('Error processing audio done response', error); }
+      catch (error) { console.log('error: failure to process audio done response', error); }
     }
-    else { console.log('Received non-audio message from OpenAI API:', response); }
+    else { console.log('openai:', response.type); }
   });
 
   ws.on('error', (error) => {
-    console.log('WebSocket Error', error);
+    console.log('error: websocket', error);
   });
 
   ws.on('close', () => {
-    console.log('WebSocket connection closed');
+    console.log('websocket disconnected');
     ws = null;
   });
 }
 
 async function connectChannel(interaction) {
-  if(interaction) { console.log('Received /connect command'); }
+  if(interaction) { console.log('received /connect command'); }
   const userChannel = interaction.member.voice.channel;
-  console.log(`Connecting to voice channel: ${userChannel.name}`);
+  console.log(`connecting to channel: ${userChannel.name}`);
   if (!userChannel) {
-    console.log('User is not in a voice channel');
+    console.log('error: user is not in a channel');
     await interaction.editReply({ content: 'You need to be in a voice channel to use this command!', ephemeral: true });
     return;
   }
@@ -218,42 +213,42 @@ async function connectChannel(interaction) {
   });
 
   connection.on(VoiceConnectionStatus.Ready, async () => {
-    console.log('Connected to voice channel');
-    try { await interaction.editReply({ content: 'Connected to voice channel' }); }
-    catch (error) { console.log('Error replying to interaction', error); }
-    try { await startConversation(); }
-    catch (error) { console.log('Error starting startConversation()', error); }
+    console.log('connected to voice channel');
+    try { await interaction.editReply({ content: 'Connected to voice channel!' }); }
+    catch (error) { console.log('error: failure to reply to discord interaction', error); }
     try { await startListening(); }
-    catch (error) { console.log('Error starting startListening()', error); }
+    catch (error) { console.log('error: startListening() broke', error); }
+    try { await startConversation(); }
+    catch (error) { console.log('error: startConversation() broke', error); }
   });
 
   connection.on(VoiceConnectionStatus.Disconnected, () => {
-    console.log('Disconnected from voice channel');
+    console.log('disconnected from voice');
   });
 
   connection.on('error', (error) => {
-    console.log('Voice connection error', error);
+    console.log('error: issue with voice connectivity', error);
   });
 }
 
 async function disconnectChannel(interaction) {
-  if(interaction) { console.log('Received /disconnect command'); }
+  if(interaction) { console.log('received /disconnect command'); }
   if (connection) {
-    console.log('Disconnecting from voice channel');
+    console.log('disconnecting from voice');
     connection.destroy();
     connection = null;
     audioPlayer = null;
   }
   else {
-    console.log('No active voice channel connection');
+    console.log('error: no active voice connection');
   }
   if (ws) {
-    console.log('Closing WebSocket connection');
+    console.log('disconnecting websocket');
     ws.close();
     ws = null;
   }
   else {
-    console.log('No active websocket connection');
+    console.log('error: no active websocket');
   }
 }
 
@@ -266,17 +261,18 @@ client.on(Events.InteractionCreate, async interaction => {
     else if (interaction.commandName === 'disconnect') { await disconnectChannel(interaction); }
   }
   catch (error) {
-    console.log('Error handling interaction', error);
+    console.log('error: mishandling discord interaction', error);
     if (!interaction.replied && !interaction.deferred) {
       try { await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true }); }
-      catch (replyError) { console.log('Error sending reply', replyError); }
+      catch (replyError) { console.log('error: could not send interaction reply', replyError); }
     }
   }
 });
 
 // Shutdown
 const shutdown = async () => {
-  console.log('Shutting down');
+  console.log('');
+  console.log('bot shutting down');
   await disconnectChannel();
   await client.destroy();
   process.exit(0);
@@ -287,23 +283,23 @@ process.on('SIGTERM', () => shutdown());
 
 // Startup
 client.on(Events.ClientReady, async () => {
-  console.log('Starting up');
+  console.log('bot starting up');
   const commands = [
     new SlashCommandBuilder().setName('connect').setDescription('Connect to the voice channel'),
     new SlashCommandBuilder().setName('disconnect').setDescription('Disconnect from the voice channel'),
   ];
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
   try {
-    console.log('Registering slash commands');
+    console.log('registering slash commands');
     await rest.put(
       Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-    console.log('Bot is ready');
+    console.log('bot is ready');
   }
   catch (error) { console.log('Error registering slash commands', error); }
 });
 
 // Login
-console.log('Logging in to discord');
+console.log('logging in to discord');
 client.login(process.env.DISCORD_TOKEN);
