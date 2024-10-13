@@ -50,7 +50,7 @@ function createWavHeader(dataSize, numChannels = 1, sampleRate = 24000, bitsPerS
 
 async function saveAudioBufferToFile(pcmBuffer, username) {
   const audioBuffer = Buffer.concat(pcmBuffer);
-  const filePath = path.join(__dirname, 'buffer', `${username}-${Date.now()}.wav`);
+  const filePath = path.join(__dirname, 'debug', `${username}-${Date.now()}.wav`);
   const header = createWavHeader(audioBuffer.length);
   const combinedBuffer = Buffer.concat([header, audioBuffer]);
   await fs.promises.writeFile(filePath, combinedBuffer);
@@ -74,13 +74,19 @@ async function startListening() {
   console.log('listening to voice channel');
   const receiver = connection.receiver;
   
-  //if(!ws && !)
-
   receiver.speaking.on('start', async (userId) => {
     try {
       const user = client.users.cache.get(userId);
       if (user) {
         console.log(`${user.username} started speaking`);
+        ws.send(JSON.stringify({ type: 'response.cancel' }));
+
+        if (audioPlayer) {
+          console.log('detected user speech, halting audio');
+          audioPlayer.stop();
+          wavBuffer = [];
+        }
+
         const userRawStream = receiver.subscribe(userId, {
           end: {
             behavior: EndBehaviorType.AfterSilence,
@@ -88,21 +94,21 @@ async function startListening() {
           }
         });
 
-        let userPCMBuffer = []; // initialize
+        //let userPCMBuffer = []; // initialize
         const userPCMStream = userRawStream.pipe(new prism.opus.Decoder({ rate: 24000, channels: 1, frameSize: 960 }));
 
         userPCMStream.on('data', async (chunk) => {
           //console.log(`${user.username} voice processing`);
           await sendAudioBufferToWebSocket(chunk.toString('base64'));
-          userPCMBuffer.push(chunk);
+          //userPCMBuffer.push(chunk);
         });
 
         userPCMStream.on('end', async () => {
           console.log(`${user.username} stopped speaking`);
           ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
           ws.send(JSON.stringify({ type: 'response.create' }));
-          await saveAudioBufferToFile(userPCMBuffer, user.username);
-          userPCMBuffer = []; // reset
+          //await saveAudioBufferToFile(userPCMBuffer, user.username);
+          //userPCMBuffer = []; // reset
         });
       }
       else {
@@ -131,6 +137,13 @@ async function startConversation() {
 
   ws.on('open', () => {
     console.log('websocket connected');
+    ws.send(JSON.stringify({
+      type: 'session.update',
+      session: {
+        instructions: "You don't know anything after October 2023. You are helpful and nice, but you don't like the sound of your own voice. Be charming, funny, and sarcastic, but be terse.",
+        voice: 'nova' // alloy, echo, fable, onyx, nova, shimmer 
+      }
+    }));
   });
 
   const errorHandler = (error) => {
@@ -148,40 +161,43 @@ async function startConversation() {
       errorHandler(error);
     }
     else if (response.type === "response.audio_transcript.done") { console.log('openai:', response.transcript); }
+    else if (response.type === "response.input_audio_buffer.speech_started") {
+      // send something important to the api?
+    }
     else if (response.type === "response.audio.delta") {
       try {
-        connection.subscribe(audioPlayer);
         console.log('openai: response.audio.delta');
         const audioChunk = Buffer.from(response.delta, 'base64');
         wavBuffer.push(audioChunk);
-
-        const apiPCMStream = new Readable();
-        apiPCMStream.push(audioChunk);
-        apiPCMStream.push(null); // one chunk at a time
-
-        const ffmpeg = new prism.FFmpeg({
-          // in: 16-bit little-endian PCM 24 kHz mono -> stdin pipe -> out: 16-bit little-endian PCM 48 kHz stereo
-          args: ['-f', 's16le', '-ar', '24000', '-ac', '1', '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '2']
-        });
-
-        const pcmStream = apiPCMStream.pipe(ffmpeg);
-        const opusEncoder = new prism.opus.Encoder({ rate: 48000, channels: 2, frameSize: 960 });
-        const opusStream = pcmStream.pipe(opusEncoder);
-        const resource = createAudioResource(opusStream);
-
-        audioPlayer.play(resource);
       }
       catch (error) { console.log('error: failure to process audio delta response', error); }
     } 
     else if (response.type === "response.audio.done") {
       try {
         const combinedBuffer = Buffer.concat(wavBuffer);
-        await saveAudioBufferToFile([combinedBuffer], 'openai-response');
         wavBuffer = []; // reset
+        //await saveAudioBufferToFile([combinedBuffer], 'openai-response');
+
+        const apiPCMStream = new Readable();
+        apiPCMStream.push(combinedBuffer);
+        apiPCMStream.push(null); // close
+
+        const ffmpeg = new prism.FFmpeg({
+          // in: 16-bit little-endian PCM 24 kHz mono -> stdin pipe -> out: 16-bit little-endian PCM 48 kHz stereo
+          args: ['-f', 's16le', '-ar', '24000', '-ac', '1', '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '1']
+        });
+
+        const pcmStream = apiPCMStream.pipe(ffmpeg);
+        const opusEncoder = new prism.opus.Encoder({ rate: 48000, channels: 1, frameSize: 960 });
+        const opusStream = pcmStream.pipe(opusEncoder);
+        const resource = createAudioResource(opusStream);
+
+        connection.subscribe(audioPlayer);
+        audioPlayer.play(resource);
       }
       catch (error) { console.log('error: failure to process audio done response', error); }
     }
-    else { console.log('openai:', response.type); }
+    //else { console.log('openai:', response.type); }
   });
 
   ws.on('error', (error) => {
