@@ -1,5 +1,3 @@
-//discord realtime api bot
-
 //modules
 require('dotenv').config();
 const { Client, Events, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
@@ -23,6 +21,7 @@ const client = new Client({
 let ws;
 let connection;
 let audioPlayer;
+let currentAudioStream;
 
 async function sendAudioBufferToWebSocket(base64Chunk) {
   if (base64Chunk.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
@@ -46,18 +45,17 @@ async function startListening() {
       const user = client.users.cache.get(userId);
       if (user) {
         console.log(`${user.username} started speaking`);
-        ws.send(JSON.stringify({ type: 'response.cancel' }));
 
         if (audioPlayer) {
-          console.log('detected user speech, halting audio');
+          //console.log('detected user speech');
           audioPlayer.stop();
-          wavBuffer = [];
+          ws.send(JSON.stringify({ type: 'response.cancel' }));
         }
 
         const userRawStream = receiver.subscribe(userId, {
           end: {
             behavior: EndBehaviorType.AfterSilence,
-            duration: 300 // ms
+            duration: 500 // ms
           }
         });
 
@@ -81,11 +79,16 @@ async function startListening() {
 
 async function startConversation() {
   console.log('connecting to websocket');
-  let wavBuffer = []; // initialize
 
   if (!audioPlayer) {
     audioPlayer = createAudioPlayer();
     console.log('connected to audio stream');
+    audioPlayer.on('stateChange', (oldState, newState) => {
+      if (oldState.status !== newState.status) {
+        if (newState.status === 'playing') { console.log('Bot started speaking'); }
+        else if (newState.status === 'idle') { console.log('Bot finished speaking'); }
+      }
+    });
   }
 
   ws = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01', {
@@ -101,47 +104,49 @@ async function startConversation() {
       type: 'session.update',
       session: {
         instructions: `Today's date is ${new Date().toDateString()}. You don't know anything after October 2023.`,
-        voice: 'alloy' // alloy, echo, shimmer (soon: fable, onyx, nova)
+        voice: 'echo' // alloy, echo, shimmer (soon: fable, onyx, nova)
       }
     }));
   });
 
   ws.on('message', async (message) => {
     const response = JSON.parse(message.toString());
-    if (response.type === 'error') {
-      const { error } = response;
-      console.log('openai:', error.message);
-    }
-    else if (response.type === "response.audio_transcript.done") { console.log('openai:', response.transcript); }
-    else if (response.type === "response.audio.delta") {
+    //if (response.type === 'error') {
+    //  const { error } = response;
+    //  console.log('openai:', error.message);
+    //}
+    //else if (response.type === "response.audio_transcript.done") {
+    //  console.log('openai:', response.transcript);
+    //}
+    if (response.type === "response.audio.delta") {
       try {
-        console.log('openai: response.audio.delta');
+        //console.log('openai: response.audio.delta');
         const audioChunk = Buffer.from(response.delta, 'base64');
-        wavBuffer.push(audioChunk);
+        if (currentAudioStream) { currentAudioStream.push(audioChunk); }
+        else {
+          currentAudioStream = new Readable({ read() {} });
+          const ffmpeg = new prism.FFmpeg({
+            // in: 16-bit little-endian PCM 24 kHz mono -> stdin pipe -> out: 16-bit little-endian PCM 48 kHz stereo
+            args: ['-f', 's16le', '-ar', '24000', '-ac', '1', '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '1']
+          });
+          const pcmStream = currentAudioStream.pipe(ffmpeg);
+          const opusEncoder = new prism.opus.Encoder({ rate: 48000, channels: 1, frameSize: 960 });
+          const opusStream = pcmStream.pipe(opusEncoder);
+          const resource = createAudioResource(opusStream);
+
+          connection.subscribe(audioPlayer);
+          audioPlayer.play(resource);
+        }
       }
       catch (error) { console.log('error: failure to process audio delta response', error); }
     } 
     else if (response.type === "response.audio.done") {
       try {
-        const combinedBuffer = Buffer.concat(wavBuffer);
-        wavBuffer = []; // reset
-
-        const apiPCMStream = new Readable();
-        apiPCMStream.push(combinedBuffer);
-        apiPCMStream.push(null); // close
-
-        const ffmpeg = new prism.FFmpeg({
-          // in: 16-bit little-endian PCM 24 kHz mono -> stdin pipe -> out: 16-bit little-endian PCM 48 kHz stereo
-          args: ['-f', 's16le', '-ar', '24000', '-ac', '1', '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '1']
-        });
-
-        const pcmStream = apiPCMStream.pipe(ffmpeg);
-        const opusEncoder = new prism.opus.Encoder({ rate: 48000, channels: 1, frameSize: 960 });
-        const opusStream = pcmStream.pipe(opusEncoder);
-        const resource = createAudioResource(opusStream);
-
-        connection.subscribe(audioPlayer);
-        audioPlayer.play(resource);
+        //console.log('openai: finished processing audio');
+        if (currentAudioStream) {
+          currentAudioStream.push(null);
+          currentAudioStream = null;
+        }
       }
       catch (error) { console.log('error: failure to process audio done response', error); }
     }
@@ -195,6 +200,12 @@ async function connectChannel(interaction) {
 }
 
 async function disconnectChannel() {
+  if (ws) {
+    console.log('warning: disconnecting websocket');
+    ws.close();
+    ws = null;
+  }
+  else { console.log('warning: no active websocket'); }
   if (connection) {
     console.log('warning: disconnecting from voice');
     connection.destroy();
@@ -202,12 +213,6 @@ async function disconnectChannel() {
     audioPlayer = null;
   }
   else { console.log('warning: no active voice connection'); }
-  if (ws) {
-    console.log('warning: disconnecting websocket');
-    ws.close();
-    ws = null;
-  }
-  else { console.log('warning: no active websocket'); }
 }
 
 // Slash commands handler
