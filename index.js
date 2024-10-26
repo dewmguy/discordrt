@@ -1,3 +1,5 @@
+// ChatGPT v2 / realtime api bot
+
 //modules
 require('dotenv').config();
 const { Client, Events, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
