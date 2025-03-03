@@ -49,7 +49,6 @@ async function startListening() {
         console.log(`${user.username} started speaking`);
 
         if (audioPlayer) {
-          //console.log('detected user speech');
           audioPlayer.stop();
           ws.send(JSON.stringify({ type: 'response.cancel' }));
         }
@@ -113,29 +112,17 @@ async function startConversation() {
 
   ws.on('message', async (message) => {
     const response = JSON.parse(message.toString());
-    //if (response.type === 'error') {
-    //  const { error } = response;
-    //  console.log('openai:', error.message);
-    //}
-    //else if (response.type === "response.audio_transcript.done") {
-    //  console.log('openai:', response.transcript);
-    //}
     if (response.type === "response.audio.delta") {
       try {
-        //console.log('openai: response.audio.delta');
         const audioChunk = Buffer.from(response.delta, 'base64');
         if (currentAudioStream) { currentAudioStream.push(audioChunk); }
         else {
           currentAudioStream = new Readable({ read() {} });
-          const ffmpeg = new prism.FFmpeg({
-            // in: 16-bit little-endian PCM 24 kHz mono -> stdin pipe -> out: 16-bit little-endian PCM 48 kHz stereo
-            args: ['-f', 's16le', '-ar', '24000', '-ac', '1', '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '1']
-          });
+          const ffmpeg = new prism.FFmpeg({ args: ['-f', 's16le', '-ar', '24000', '-ac', '1', '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '1'] });
           const pcmStream = currentAudioStream.pipe(ffmpeg);
           const opusEncoder = new prism.opus.Encoder({ rate: 48000, channels: 1, frameSize: 960 });
           const opusStream = pcmStream.pipe(opusEncoder);
           const resource = createAudioResource(opusStream);
-
           connection.subscribe(audioPlayer);
           audioPlayer.play(resource);
         }
@@ -144,7 +131,6 @@ async function startConversation() {
     } 
     else if (response.type === "response.audio.done") {
       try {
-        //console.log('openai: finished processing audio');
         if (currentAudioStream) {
           currentAudioStream.push(null);
           currentAudioStream = null;
